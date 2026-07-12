@@ -1,0 +1,7 @@
+{
+  "router_ip": "192.168.1.1",
+  "router_type": "ZTE_F670L",
+  "username": "admin",
+  "refresh_interval": 30,
+  "auto_login": false
+}
