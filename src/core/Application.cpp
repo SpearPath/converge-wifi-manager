@@ -2,6 +2,14 @@
 
 #include <iostream>
 #include <limits>
+#include <iomanip>
+
+#ifdef _WIN32
+#include <conio.h>
+#else
+#include <termios.h>
+#include <unistd.h>
+#endif
 
 namespace converge::core {
 
@@ -14,23 +22,72 @@ std::string readLine(const std::string& prompt) {
     return value;
 }
 
+std::string readPassword(const std::string& prompt) {
+    std::cout << prompt;
+    std::string password;
+#ifdef _WIN32
+    char ch;
+    while (true) {
+        ch = static_cast<char>(_getch());
+        if (ch == '\r' || ch == '\n') {
+            break;
+        }
+        if (ch == '\b') { // Backspace
+            if (!password.empty()) {
+                std::cout << "\b \b";
+                password.pop_back();
+            }
+        } else if (ch != 0 && ch != -32) { // Skip arrows/function keys
+            password.push_back(ch);
+            std::cout << '*';
+        }
+    }
+    std::cout << '\n';
+#else
+    termios oldt;
+    tcgetattr(STDIN_FILENO, &oldt);
+    termios newt = oldt;
+    newt.c_lflag &= ~ECHO;
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    std::getline(std::cin, password);
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+#endif
+    return password;
+}
+
 void printDevices(const std::vector<models::Device>& devices) {
     if (devices.empty()) {
-        std::cout << "No connected devices loaded.\n";
+        std::cout << "\033[1;33mNo connected devices loaded.\033[0m\n";
         return;
     }
 
+    // Print Table Header
+    std::cout << "\033[1;36m┌───────────────────────────┬─────────────────┬─────────────────────┬────────────┐\033[0m\n"
+              << "\033[1;36m│ \033[1;37mName                      \033[1;36m│ \033[1;37mIP Address      \033[1;36m│ \033[1;37mMAC Address         \033[1;36m│ \033[1;37mStatus     \033[1;36m│\033[0m\n"
+              << "\033[1;36m├───────────────────────────┼─────────────────┼─────────────────────┼────────────┤\033[0m\n";
+
     for (const auto& device : devices) {
-        std::cout << "- " << device.name << " | "
-                  << device.ipAddress << " | "
-                  << device.macAddress
-                  << (device.blocked ? " | blocked" : "")
-                  << '\n';
+        std::string name = device.name;
+        if (name.length() > 25) name = name.substr(0, 22) + "...";
+
+        std::string statusStr = device.blocked ? "\033[1;31mBlocked\033[0m" : "\033[1;32mActive\033[0m";
+        // To properly align columns with colored strings (which contain invisible escape characters),
+        // we print the non-colored columns with std::setw and handle the status separately.
+        std::cout << "\033[1;36m│\033[0m " << std::left << std::setw(26) << name
+                  << "\033[1;36m│\033[0m " << std::left << std::setw(16) << device.ipAddress
+                  << "\033[1;36m│\033[0m " << std::left << std::setw(20) << device.macAddress
+                  << "\033[1;36m│\033[0m " << std::left << (device.blocked ? "Blocked   " : "Active    ") << "\033[1;36m│\033[0m\n";
     }
+
+    std::cout << "\033[1;36m└───────────────────────────┴─────────────────┴─────────────────────┴────────────┘\033[0m\n";
 }
 
 void printResult(const models::OperationResult& result) {
-    std::cout << (result.ok ? "OK: " : "Error: ") << result.message << '\n';
+    if (result.ok) {
+        std::cout << "\033[1;32m[SUCCESS]\033[0m " << result.message << '\n';
+    } else {
+        std::cout << "\033[1;31m[ERROR]\033[0m " << result.message << '\n';
+    }
 }
 
 }  // namespace
@@ -44,7 +101,7 @@ Application::Application(router::IRouterClient& routerClient,
 
 void Application::login() {
     const std::string username = readLine("Username: ");
-    const std::string password = readLine("Password: ");
+    const std::string password = readPassword("Password: ");
     const auto result = routerClient_.login(username, password);
     printResult(result);
     if (!result.ok) {
@@ -58,10 +115,12 @@ void Application::logout() {
 
 void Application::showRouterInfo() {
     const auto info = routerClient_.routerInfo();
-    std::cout << "Model: " << info.model << '\n'
-              << "Firmware: " << info.firmwareVersion << '\n'
-              << "Uptime: " << info.uptime << '\n'
-              << "WAN status: " << info.wanStatus << '\n';
+    std::cout << "\n\033[1;35mRouter Information\033[0m\n"
+              << "──────────────────\n"
+              << "  Model:       " << info.model << '\n'
+              << "  Firmware:    " << info.firmwareVersion << '\n'
+              << "  Uptime:      " << info.uptime << '\n'
+              << "  WAN Status:  " << (info.wanStatus.find("active") != std::string::npos ? "\033[1;32m" : "\033[1;31m") << info.wanStatus << "\033[0m\n";
 }
 
 void Application::showConnectedDevices() {
@@ -74,8 +133,9 @@ void Application::searchDevices() {
 }
 
 void Application::refreshDevices() {
+    std::cout << "Refreshing connected devices from router...\n";
     const auto devices = deviceService_.refresh();
-    std::cout << "Loaded " << devices.size() << " connected device(s).\n";
+    std::cout << "\033[1;32mLoaded " << devices.size() << " connected device(s).\033[0m\n";
     printDevices(devices);
 }
 
@@ -90,8 +150,10 @@ void Application::unblockDevice() {
 }
 
 void Application::showSettings() const {
-    std::cout << "Settings are loaded from config/config.json.\n"
-              << "Passwords are not stored by default.\n";
+    std::cout << "\n\033[1;35mSettings Details\033[0m\n"
+              << "────────────────\n"
+              << "  Source:    config/config.json\n"
+              << "  Security:  Passwords are not stored and are requested interactively.\n";
 }
 
 }  // namespace converge::core

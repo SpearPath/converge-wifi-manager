@@ -66,25 +66,26 @@ void CommandDispatcher::run() {
 }
 
 void CommandDispatcher::printMenu() const {
-    std::cout << "\n=============================\n"
-              << " Converge WiFi Manager\n"
-              << "=============================\n\n"
-              << "1. Login\n"
-              << "2. Router Information\n"
-              << "3. Connected Devices\n"
-              << "4. Search Device\n"
-              << "5. Refresh Devices\n"
-              << "6. Block Device\n"
-              << "7. Unblock Device\n"
-              << "8. Settings\n"
-              << "9. Logout\n"
-              << "0. Exit\n\n"
-              << "Choose an option: ";
+    std::cout << "\n\033[1;36m┌─────────────────────────────────────────┐\033[0m\n"
+              << "\033[1;36m│          Converge WiFi Manager          │\033[0m\n"
+              << "\033[1;36m└─────────────────────────────────────────┘\033[0m\n\n"
+              << "  \033[1;32m1.\033[0m Login\n"
+              << "  \033[1;32m2.\033[0m Router Information\n"
+              << "  \033[1;32m3.\033[0m Connected Devices\n"
+              << "  \033[1;32m4.\033[0m Search Device\n"
+              << "  \033[1;32m5.\033[0m Refresh Devices\n"
+              << "  \033[1;32m6.\033[0m Block Device\n"
+              << "  \033[1;32m7.\033[0m Unblock Device\n"
+              << "  \033[1;32m8.\033[0m Settings\n"
+              << "  \033[1;32m9.\033[0m Logout\n"
+              << "  \033[1;31m0.\033[0m Exit\n\n"
+              << "\033[1;33mChoose an option: \033[0m";
 }
 
 void CommandDispatcher::pause() const {
-    std::cout << "\nPress Enter to continue...";
+    std::cout << "\n\033[90mPress Enter to continue...\033[0m";
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
 }  // namespace converge::cli
+

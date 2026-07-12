@@ -14,7 +14,29 @@
 #include "utils/ConfigLoader.hpp"
 #include "utils/Logger.hpp"
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
+#define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
+#endif
+void enableAnsiSupport() {
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hOut != INVALID_HANDLE_VALUE) {
+        DWORD dwMode = 0;
+        if (GetConsoleMode(hOut, &dwMode)) {
+            dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+            SetConsoleMode(hOut, dwMode);
+        }
+    }
+}
+#else
+void enableAnsiSupport() {}
+#endif
+
 int main() {
+    enableAnsiSupport();
     converge::utils::Logger logger(std::cout);
     converge::utils::ConfigLoader configLoader;
     const auto config = configLoader.load(std::filesystem::path{"config/config.json"});
