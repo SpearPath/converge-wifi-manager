@@ -22,6 +22,9 @@
 #define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
 #endif
 void enableAnsiSupport() {
+    // Set console to UTF-8 code page to render Unicode box characters correctly
+    SetConsoleOutputCP(CP_UTF8);
+
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hOut != INVALID_HANDLE_VALUE) {
         DWORD dwMode = 0;
@@ -49,7 +52,7 @@ int main() {
     auto routerClient = converge::router::RouterFactory::create(config, httpClient);
     converge::services::DeviceService deviceService(*routerClient);
     converge::core::Application app(*routerClient, deviceService, logger);
-    converge::cli::CommandDispatcher dispatcher(app);
+    converge::cli::CommandDispatcher dispatcher(app, config);
 
     dispatcher.run();
     return 0;

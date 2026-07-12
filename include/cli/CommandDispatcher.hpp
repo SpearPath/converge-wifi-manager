@@ -1,12 +1,13 @@
 #pragma once
 
 #include "core/Application.hpp"
+#include "models/AppConfig.hpp"
 
 namespace converge::cli {
 
 class CommandDispatcher {
 public:
-    explicit CommandDispatcher(core::Application& app);
+    CommandDispatcher(core::Application& app, const models::AppConfig& config);
 
     void run();
 
@@ -15,6 +16,8 @@ private:
     void pause() const;
 
     core::Application& app_;
+    const models::AppConfig& config_;
 };
 
 }  // namespace converge::cli
+
