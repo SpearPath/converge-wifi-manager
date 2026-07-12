@@ -258,3 +258,149 @@ TEST(HtmlParsingTests, SessionExpirationDetectedOnLoginRedirect) {
     auto info = client.routerInfo();
     EXPECT_EQ(info.wanStatus, "Session expired");
 }
+
+// --- HTTP error handling ---
+
+TEST(HtmlParsingTests, LoginFailsOnNetworkError) {
+    MockHttpClient mock;
+    ZteF670LRouterClient client(testConfig(), mock);
+
+    HttpResponse errorResp;
+    errorResp.error = "Connection refused";
+
+    EXPECT_CALL(mock, send(_))
+        .WillOnce(Return(errorResp));
+
+    auto result = client.login("admin", "pass");
+    EXPECT_FALSE(result.ok);
+    EXPECT_NE(result.message.find("Connection refused"), std::string::npos);
+}
+
+TEST(HtmlParsingTests, LoginSucceedsWithout302WhenNoLoginForm) {
+    MockHttpClient mock;
+    ZteF670LRouterClient client(testConfig(), mock);
+
+    // Some firmware returns 200 with dashboard body (no redirect)
+    std::string loginPage = R"(<html><body></body></html>)";
+    std::string dashboardBody = R"(<html><body><h1>Welcome</h1></body></html>)";
+
+    EXPECT_CALL(mock, send(_))
+        .WillOnce(Return(makeResponse(200, loginPage)))  // GET /
+        .WillOnce(Return(makeResponse(200, dashboardBody)));  // POST / returns 200 with no login form
+
+    auto result = client.login("admin", "pass");
+    EXPECT_TRUE(result.ok);
+}
+
+TEST(HtmlParsingTests, ConnectedDevicesReturnsEmptyOnHttpError) {
+    MockHttpClient mock;
+    ZteF670LRouterClient client(testConfig(), mock);
+
+    std::string loginPage = R"(<html><body></body></html>)";
+    HttpResponse errorResp;
+    errorResp.error = "Timeout";
+
+    EXPECT_CALL(mock, send(_))
+        .WillOnce(Return(makeResponse(200, loginPage)))
+        .WillOnce(Return(loginRedirect()))
+        .WillOnce(Return(makeResponse(200, "")))
+        .WillOnce(Return(errorResp));
+
+    client.login("admin", "pass");
+    auto devices = client.connectedDevices();
+    EXPECT_TRUE(devices.empty());
+}
+
+TEST(HtmlParsingTests, RouterInfoHandlesServerError) {
+    MockHttpClient mock;
+    ZteF670LRouterClient client(testConfig(), mock);
+
+    std::string loginPage = R"(<html><body></body></html>)";
+
+    EXPECT_CALL(mock, send(_))
+        .WillOnce(Return(makeResponse(200, loginPage)))
+        .WillOnce(Return(loginRedirect()))
+        .WillOnce(Return(makeResponse(200, "")))
+        .WillOnce(Return(makeResponse(500, "Internal Server Error")));
+
+    client.login("admin", "pass");
+    auto info = client.routerInfo();
+    // Should not crash, should return defaults or partial info
+    EXPECT_EQ(info.model, "ZTE F670L");
+}
+
+// --- Block/unblock ---
+
+TEST(HtmlParsingTests, BlockDeviceSucceeds) {
+    MockHttpClient mock;
+    ZteF670LRouterClient client(testConfig(), mock);
+
+    std::string loginPage = R"(<html><body></body></html>)";
+
+    EXPECT_CALL(mock, send(_))
+        .WillOnce(Return(makeResponse(200, loginPage)))
+        .WillOnce(Return(loginRedirect()))
+        .WillOnce(Return(makeResponse(200, "")))
+        .WillOnce(Return(makeResponse(200, "OK")));
+
+    client.login("admin", "pass");
+    auto result = client.blockDevice("AA:BB:CC:DD:EE:FF");
+    EXPECT_TRUE(result.ok);
+}
+
+TEST(HtmlParsingTests, BlockDeviceFailsWhenNotLoggedIn) {
+    MockHttpClient mock;
+    ZteF670LRouterClient client(testConfig(), mock);
+
+    EXPECT_CALL(mock, send(_)).Times(0);
+
+    auto result = client.blockDevice("AA:BB:CC:DD:EE:FF");
+    EXPECT_FALSE(result.ok);
+    EXPECT_NE(result.message.find("Not logged in"), std::string::npos);
+}
+
+TEST(HtmlParsingTests, UnblockDeviceSucceeds) {
+    MockHttpClient mock;
+    ZteF670LRouterClient client(testConfig(), mock);
+
+    std::string loginPage = R"(<html><body></body></html>)";
+
+    EXPECT_CALL(mock, send(_))
+        .WillOnce(Return(makeResponse(200, loginPage)))
+        .WillOnce(Return(loginRedirect()))
+        .WillOnce(Return(makeResponse(200, "")))
+        .WillOnce(Return(makeResponse(200, "OK")));
+
+    client.login("admin", "pass");
+    auto result = client.unblockDevice("AA:BB:CC:DD:EE:FF");
+    EXPECT_TRUE(result.ok);
+}
+
+TEST(HtmlParsingTests, BlockDeviceRejectsEmptyMac) {
+    MockHttpClient mock;
+    ZteF670LRouterClient client(testConfig(), mock);
+
+    EXPECT_CALL(mock, send(_)).Times(0);
+
+    auto result = client.blockDevice("");
+    EXPECT_FALSE(result.ok);
+}
+
+TEST(HtmlParsingTests, SessionExpirationDuringBlock) {
+    MockHttpClient mock;
+    ZteF670LRouterClient client(testConfig(), mock);
+
+    std::string loginPage = R"(<html><body></body></html>)";
+
+    EXPECT_CALL(mock, send(_))
+        .WillOnce(Return(makeResponse(200, loginPage)))
+        .WillOnce(Return(loginRedirect()))
+        .WillOnce(Return(makeResponse(200, "")))
+        // block request gets 401
+        .WillOnce(Return(makeResponse(401, "")));
+
+    client.login("admin", "pass");
+    auto result = client.blockDevice("AA:BB:CC:DD:EE:FF");
+    EXPECT_FALSE(result.ok);
+    EXPECT_NE(result.message.find("Session expired"), std::string::npos);
+}

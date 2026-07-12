@@ -21,6 +21,12 @@ if(ENABLE_SANITIZERS AND NOT MSVC)
     add_link_options(-fsanitize=address,undefined)
 endif()
 
+option(ENABLE_COVERAGE "Enable code coverage (gcov)" OFF)
+if(ENABLE_COVERAGE AND NOT MSVC)
+    add_compile_options(--coverage -fno-inline)
+    add_link_options(--coverage)
+endif()
+
 if(WIN32)
     set(NETWORK_CLIENT src/network/WinHttpClient.cpp)
 else()

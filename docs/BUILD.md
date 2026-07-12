@@ -35,6 +35,7 @@ ctest --output-on-failure -C Release
 |------|---------|-------------|
 | `-DENABLE_CLANG_TIDY=ON` | OFF | Run clang-tidy during build (Linux/macOS only) |
 | `-DENABLE_SANITIZERS=ON` | OFF | Build with AddressSanitizer + UndefinedBehaviorSanitizer (GCC/Clang only) |
+| `-DENABLE_COVERAGE=ON` | OFF | Enable code coverage instrumentation via gcov (GCC/Clang only) |
 
 Example with all checks enabled:
 

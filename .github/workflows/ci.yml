@@ -56,3 +56,38 @@ jobs:
     - name: Test under ASan/UBSan
       working-directory: ${{github.workspace}}/build
       run: ctest --output-on-failure
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libcurl4-openssl-dev libssl-dev cmake lcov
+
+    - name: Configure with coverage
+      run: cmake -S . -B build -DENABLE_COVERAGE=ON
+
+    - name: Build
+      run: cmake --build build
+
+    - name: Test
+      working-directory: ${{github.workspace}}/build
+      run: ctest --output-on-failure
+
+    - name: Collect coverage
+      run: |
+        lcov --capture --directory build --output-file coverage.info --ignore-errors mismatch
+        lcov --remove coverage.info '/usr/*' '*/build/_deps/*' '*/tests/*' --output-file coverage.info
+        lcov --list coverage.info
+
+    - name: Generate HTML report
+      run: genhtml coverage.info --output-directory coverage-report
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage-report/

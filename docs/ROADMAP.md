@@ -1,6 +1,6 @@
 # Roadmap
 
-## v0.5 — Current (CLI + ZTE F670L)
+## v0.5 — CLI Foundation
 
 - ✅ CLI interface for login, device listing, block/unblock
 - ✅ ZTE ZXHN F670L (Converge PH) router support
@@ -9,12 +9,12 @@
 - ✅ CI pipeline (GitHub Actions) — build, test, clang-tidy, sanitizers
 - ✅ Doxygen documentation
 
-## v1.0 — Stable CLI Release
+## v1.0 — Stable CLI Release (Current)
 
-- [ ] Router plugin architecture (Huawei, FiberHome, TP-Link, etc.)
-- [ ] Code coverage reporting in CI
-- [ ] Tagged-release workflow (GitHub Releases)
-- [ ] Expanded test suite (session management, error recovery)
+- ✅ Code coverage reporting in CI (lcov + artifact upload)
+- ✅ Tagged-release workflow (GitHub Releases with cross-platform binaries)
+- ✅ Expanded test suite (27 tests — session management, error recovery, block/unblock)
+- ⏭️ Router plugin architecture — deferred (factory + interface pattern already supports extension; no second router to implement yet)
 
 ## v2.0 — Desktop GUI
 
