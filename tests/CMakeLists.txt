@@ -3,6 +3,7 @@ add_executable(converge-wifi-manager-tests
     ConfigLoaderTests.cpp
     DeviceServiceTests.cpp
     RouterClientTests.cpp
+    HtmlParsingTests.cpp
 )
 target_link_libraries(converge-wifi-manager-tests PRIVATE 
     converge-wifi-manager-core 

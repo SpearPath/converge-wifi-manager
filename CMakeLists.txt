@@ -15,6 +15,12 @@ if(ENABLE_CLANG_TIDY)
     endif()
 endif()
 
+option(ENABLE_SANITIZERS "Enable ASan and UBSan" OFF)
+if(ENABLE_SANITIZERS AND NOT MSVC)
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address,undefined)
+endif()
+
 if(WIN32)
     set(NETWORK_CLIENT src/network/WinHttpClient.cpp)
 else()
@@ -44,7 +50,8 @@ if(WIN32)
     target_link_libraries(converge-wifi-manager-core PUBLIC winhttp)
 else()
     find_package(CURL REQUIRED)
-    target_link_libraries(converge-wifi-manager-core PUBLIC CURL::libcurl)
+    find_package(OpenSSL REQUIRED)
+    target_link_libraries(converge-wifi-manager-core PUBLIC CURL::libcurl OpenSSL::Crypto)
 endif()
 
 # Main executable
@@ -59,8 +66,14 @@ FetchContent_Declare(
   URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
   DOWNLOAD_EXTRACT_TIMESTAMP true
 )
+FetchContent_Declare(
+  json
+  URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+  DOWNLOAD_EXTRACT_TIMESTAMP true
+)
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
+FetchContent_MakeAvailable(googletest json)
+target_link_libraries(converge-wifi-manager-core PUBLIC nlohmann_json::nlohmann_json)
 
 add_subdirectory(tests)

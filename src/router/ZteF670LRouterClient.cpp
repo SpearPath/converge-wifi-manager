@@ -46,7 +46,23 @@ std::string sha256Hex(const std::string& input) {
     return result;
 }
 #else
-std::string sha256Hex(const std::string&) { return ""; } // Stub for POSIX
+#include <openssl/evp.h>
+std::string sha256Hex(const std::string& input) {
+    unsigned char hash[EVP_MAX_MD_SIZE];
+    unsigned int len = 0;
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(ctx, EVP_sha256(), nullptr);
+    EVP_DigestUpdate(ctx, input.data(), input.size());
+    EVP_DigestFinal_ex(ctx, hash, &len);
+    EVP_MD_CTX_free(ctx);
+    std::string result;
+    char hex[3];
+    for (unsigned int i = 0; i < len; ++i) {
+        snprintf(hex, sizeof(hex), "%02x", hash[i]);
+        result += hex;
+    }
+    return result;
+}
 #endif
 
 namespace {
