@@ -14,20 +14,11 @@ The primary service coordinating operations on connected devices. Maintains a ca
 ```cpp
 class DeviceService {
 public:
-    DeviceService(std::unique_ptr<router::IRouterClient> routerClient);
+    explicit DeviceService(router::IRouterClient& routerClient);
 
-    // Refresh device cache by querying the router
-    models::OperationResult refreshDevices();
-
-    // Query active cache
-    std::vector<models::Device> getCachedDevices() const;
-
-    // Search active cache by MAC address, IP, or Name (case-insensitive substring)
-    std::vector<models::Device> searchDevices(const std::string& query) const;
-
-    // Block/unblock device by MAC
-    models::OperationResult blockDevice(const std::string& macAddress);
-    models::OperationResult unblockDevice(const std::string& macAddress);
+    std::vector<models::Device> refresh();
+    std::vector<models::Device> search(const std::string& query) const;
+    const std::vector<models::Device>& cachedDevices() const;
 };
 ```
 
