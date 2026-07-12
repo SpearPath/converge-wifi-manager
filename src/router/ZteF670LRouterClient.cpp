@@ -96,62 +96,6 @@ std::string extractBetween(const std::string& html,
     return html.substr(pos, end - pos);
 }
 
-// Parse an HTML table into rows of cells (simple <td>...</td> extraction)
-std::vector<std::vector<std::string>> parseTableRows(const std::string& html,
-                                                       const std::string& tableMarker) {
-    std::vector<std::vector<std::string>> rows;
-    auto tablePos = html.find(tableMarker);
-    if (tablePos == std::string::npos) return rows;
-
-    // Find the table body
-    auto bodyStart = html.find("<tbody", tablePos);
-    if (bodyStart == std::string::npos) bodyStart = html.find("<tr", tablePos);
-    auto tableEnd = html.find("</table>", tablePos);
-    if (tableEnd == std::string::npos) tableEnd = html.size();
-
-    std::string tableHtml = html.substr(bodyStart, tableEnd - bodyStart);
-
-    // Extract each <tr>...</tr>
-    std::string::size_type trPos = 0;
-    while ((trPos = tableHtml.find("<tr", trPos)) != std::string::npos) {
-        auto trEnd = tableHtml.find("</tr>", trPos);
-        if (trEnd == std::string::npos) break;
-        std::string row = tableHtml.substr(trPos, trEnd - trPos);
-        trPos = trEnd + 5;
-
-        // Extract each <td>...</td>
-        std::vector<std::string> cells;
-        std::string::size_type tdPos = 0;
-        while ((tdPos = row.find("<td", tdPos)) != std::string::npos) {
-            auto contentStart = row.find('>', tdPos);
-            if (contentStart == std::string::npos) break;
-            contentStart++;
-            auto tdEnd = row.find("</td>", contentStart);
-            if (tdEnd == std::string::npos) break;
-            // Strip any inner HTML tags
-            std::string cell = row.substr(contentStart, tdEnd - contentStart);
-            std::string stripped;
-            bool inTag = false;
-            for (char c : cell) {
-                if (c == '<') inTag = true;
-                else if (c == '>') inTag = false;
-                else if (!inTag) stripped += c;
-            }
-            // Trim whitespace
-            auto start = stripped.find_first_not_of(" \t\r\n");
-            auto end = stripped.find_last_not_of(" \t\r\n");
-            cells.push_back(start != std::string::npos
-                                ? stripped.substr(start, end - start + 1)
-                                : std::string{});
-            tdPos = tdEnd + 5;
-        }
-        if (!cells.empty()) {
-            rows.push_back(std::move(cells));
-        }
-    }
-    return rows;
-}
-
 }  // namespace
 
 ZteF670LRouterClient::ZteF670LRouterClient(models::AppConfig config,
