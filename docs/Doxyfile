@@ -1,6 +1,6 @@
 PROJECT_NAME           = "Converge WiFi CLI Device Manager"
 OUTPUT_DIRECTORY       = doxygen_output
-INPUT                  = ../src ../include ../docs ../README.md ../PROJECT_SPEC.md ../CHANGELOG.md ../CONTRIBUTING.md
+INPUT                  = ../src ../include ../docs ../README.md ../PROJECT_SPEC.md ../CHANGELOG.md ../CONTRIBUTING.md ../docs/ARCHITECTURE.md
 USE_MDFILE_AS_MAINPAGE = ../README.md
 RECURSIVE              = YES
 GENERATE_HTML          = YES

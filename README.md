@@ -2,7 +2,7 @@
 
 A cross-platform C++23 CLI for managing an owned or authorized Converge ZTE F670L router.
 
-This repository is currently at the v0.1 scaffold stage: the project builds, the CLI menu exists, and the clean architecture boundaries are in place. Router HTTP endpoints are intentionally not guessed. Login, device listing, block, and unblock will be implemented after the ZTE F670L request/response behavior is confirmed.
+This repository is currently at the v0.5 stage: the project builds, the CLI menu exists, and the core router endpoints (login, device listing, block, and unblock) for the ZTE F670L have been implemented based on community research. Unit tests and CI pipelines are active.
 
 ## Current Features
 
@@ -11,29 +11,23 @@ This repository is currently at the v0.1 scaffold stage: the project builds, the
 - Application, service, router-client, model, and utility layers
 - Config loading from `config/config.json`
 - Basic console logger
-- Real WinHTTP-based HTTP client (Windows, no dependencies)
+- Real WinHTTP-based HTTP client (Windows, no dependencies) and LibCurl support (Linux/Termux)
 - ZTE F670L router adapter with protocol implementation based on community research
+- GoogleTest Unit testing suite
+- Automated GitHub Actions CI pipeline
 - No hardcoded passwords
 
 ## Architecture
 
-```text
-CLI
- |
- v
-Application
- |
- v
-Services
- |
- v
-RouterClient
- |
- v
-HttpClient (planned)
- |
- v
-Router
+```mermaid
+flowchart TD
+    CLI[CLI Interface] --> App[Application]
+    App --> DS[Device Service]
+    App --> CL[Config Loader]
+    App --> L[Logger]
+    DS --> RC[Router Client]
+    RC --> HC[HTTP Client]
+    HC --> Router[Converge Router]
 ```
 
 The CLI must not call networking directly. Router behavior belongs behind `IRouterClient`, with one implementation per supported router family.
