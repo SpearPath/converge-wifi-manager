@@ -47,15 +47,11 @@ CurlHttpClient::~CurlHttpClient() {
     curl_global_cleanup();
 }
 
-HttpResponse CurlHttpClient::get(const std::string& url, const std::map<std::string, std::string>& headers) {
-    return performRequest(url, "", headers, false);
+HttpResponse CurlHttpClient::send(const HttpRequest& request) {
+    return performRequest(request);
 }
 
-HttpResponse CurlHttpClient::post(const std::string& url, const std::string& body, const std::map<std::string, std::string>& headers) {
-    return performRequest(url, body, headers, true);
-}
-
-HttpResponse CurlHttpClient::performRequest(const std::string& url, const std::string& body, const std::map<std::string, std::string>& headers, bool isPost) {
+HttpResponse CurlHttpClient::performRequest(const HttpRequest& request) {
     HttpResponse response;
     
     CURL* curl = curl_easy_init();
@@ -64,27 +60,39 @@ HttpResponse CurlHttpClient::performRequest(const std::string& url, const std::s
         return response;
     }
     
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, request.url.c_str());
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response.body);
     curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, HeaderCallback);
     curl_easy_setopt(curl, CURLOPT_HEADERDATA, &response.headers);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L); // Don't automatically follow redirect, our logic handles it
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(request.timeoutSeconds));
     
     // Set headers
     struct curl_slist* chunk = nullptr;
-    for (const auto& [key, value] : headers) {
+    for (const auto& [key, value] : request.headers) {
         std::string headerStr = key + ": " + value;
         chunk = curl_slist_append(chunk, headerStr.c_str());
     }
+    
+    // Set cookies
+    if (!request.cookies.empty()) {
+        std::string cookieStr;
+        for (const auto& [key, value] : request.cookies) {
+            if (!cookieStr.empty()) cookieStr += "; ";
+            cookieStr += key + "=" + value;
+        }
+        curl_easy_setopt(curl, CURLOPT_COOKIE, cookieStr.c_str());
+    }
+    
     if (chunk) {
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk);
     }
     
-    if (isPost) {
+    if (request.method == HttpMethod::Post) {
         curl_easy_setopt(curl, CURLOPT_POST, 1L);
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, body.length());
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, request.body.c_str());
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, request.body.length());
     }
     
     CURLcode res = curl_easy_perform(curl);

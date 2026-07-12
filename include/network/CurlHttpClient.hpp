@@ -14,11 +14,10 @@ public:
     CurlHttpClient();
     ~CurlHttpClient() override;
 
-    HttpResponse get(const std::string& url, const std::map<std::string, std::string>& headers) override;
-    HttpResponse post(const std::string& url, const std::string& body, const std::map<std::string, std::string>& headers) override;
+    HttpResponse send(const HttpRequest& request) override;
 
 private:
-    HttpResponse performRequest(const std::string& url, const std::string& body, const std::map<std::string, std::string>& headers, bool isPost);
+    HttpResponse performRequest(const HttpRequest& request);
 };
 
 } // namespace converge::network

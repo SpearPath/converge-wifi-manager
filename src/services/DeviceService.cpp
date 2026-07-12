@@ -1,6 +1,7 @@
 #include "services/DeviceService.hpp"
 
 #include <algorithm>
+#include <iterator>
 #include <cctype>
 
 namespace converge::services {
