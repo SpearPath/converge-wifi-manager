@@ -27,6 +27,7 @@ add_library(converge-wifi-manager-core STATIC
     src/core/Application.cpp
     ${NETWORK_CLIENT}
     src/router/ZteF670LRouterClient.cpp
+    src/router/RouterFactory.cpp
     src/services/DeviceService.cpp
     src/utils/ConfigLoader.cpp
     src/utils/Logger.cpp

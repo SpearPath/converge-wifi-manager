@@ -29,6 +29,7 @@ private:
                                     const std::string& contentType = "application/x-www-form-urlencoded");
     std::string fetchLoginToken();
     void mergeCookies(const network::HttpResponse& response);
+    void checkSessionExpiration(const network::HttpResponse& response);
 
     models::AppConfig config_;
     network::IHttpClient& httpClient_;

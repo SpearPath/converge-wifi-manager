@@ -47,6 +47,7 @@ models::AppConfig ConfigLoader::load(const std::filesystem::path& path) const {
     }
 
     config.routerIp = readStringValue(json, "router_ip", config.routerIp);
+    config.routerType = readStringValue(json, "router_type", config.routerType);
     config.username = readStringValue(json, "username", config.username);
     config.refreshInterval = std::chrono::seconds{
         readIntValue(json, "refresh_interval", static_cast<int>(config.refreshInterval.count()))};

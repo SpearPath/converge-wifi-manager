@@ -114,6 +114,19 @@ void ZteF670LRouterClient::mergeCookies(const network::HttpResponse& response) {
     }
 }
 
+void ZteF670LRouterClient::checkSessionExpiration(const network::HttpResponse& resp) {
+    if (loggedIn_) {
+        bool isRedirectToLogin = resp.headers.count("Location") && resp.headers.at("Location").find("login") != std::string::npos;
+        bool bodyContainsLogin = resp.body.find("Frm_Logintoken") != std::string::npos;
+        
+        if (resp.statusCode == 401 || isRedirectToLogin || bodyContainsLogin) {
+            loggedIn_ = false;
+            sessionToken_.clear();
+            cookies_.clear();
+        }
+    }
+}
+
 network::HttpResponse ZteF670LRouterClient::httpGet(const std::string& path) {
     network::HttpRequest req;
     req.method = network::HttpMethod::Get;
@@ -122,6 +135,7 @@ network::HttpResponse ZteF670LRouterClient::httpGet(const std::string& path) {
     req.headers["Referer"] = baseUrl() + "/";
     auto resp = httpClient_.send(req);
     mergeCookies(resp);
+    checkSessionExpiration(resp);
     return resp;
 }
 
@@ -137,6 +151,7 @@ network::HttpResponse ZteF670LRouterClient::httpPost(const std::string& path,
     req.headers["Referer"] = baseUrl() + "/";
     auto resp = httpClient_.send(req);
     mergeCookies(resp);
+    checkSessionExpiration(resp);
     return resp;
 }
 
@@ -261,7 +276,6 @@ models::RouterInfo ZteF670LRouterClient::routerInfo() {
         return info;
     }
 
-    // ponytail: device info page path varies. Common paths:
     // Helper to unescape HTML entities like &#86;
     auto unescapeHtmlEntities = [](const std::string& str) {
         std::string res;
@@ -283,6 +297,11 @@ models::RouterInfo ZteF670LRouterClient::routerInfo() {
     };
 
     auto resp = httpGet("/getpage.gch?pid=1002&nextpage=status_dev_info_t.gch");
+    if (!loggedIn_) {
+        info.wanStatus = "Session expired";
+        return info;
+    }
+    
     if (resp.error.empty() && !resp.body.empty()) {
         auto fw = extractBetween(resp.body, "id=\"Frm_SoftwareVer\" name=\"Frm_SoftwareVer\" class=\"tdright\">", "</td>");
         if (!fw.empty()) {
@@ -308,6 +327,10 @@ std::vector<models::Device> ZteF670LRouterClient::connectedDevices() {
     // /getpage.gch?pid=1005&nextpage=net_dhcp_dynamic_t.gch
     // /status_deviceinfo.html (some firmware puts it here)
     auto resp = httpGet("/getpage.gch?pid=1002&nextpage=net_dhcp_dynamic_t.gch");
+    
+    // Check if session expired during the request
+    if (!loggedIn_) return devices;
+    
     if (!resp.error.empty() || resp.body.empty()) return devices;
 
     // Helper to unescape ZTE hex string e.g., "\x3a" -> ":", "\x2e" -> "."
@@ -382,6 +405,10 @@ models::OperationResult ZteF670LRouterClient::blockDevice(const std::string& mac
                        "&WMACAddr=" + urlEncode(macAddress);
     auto resp = httpPost("/getpage.gch?pid=1002&nextpage=net_wlanm_macfilter1_t.gch", body);
 
+    if (!loggedIn_) {
+        return models::OperationResult::failure("Session expired during block request. Login again.");
+    }
+
     if (!resp.error.empty()) {
         return models::OperationResult::failure("Block request failed: " + resp.error);
     }
@@ -407,6 +434,10 @@ models::OperationResult ZteF670LRouterClient::unblockDevice(const std::string& m
                        "&WFilterMode=Allow"
                        "&WMACAddr=" + urlEncode(macAddress);
     auto resp = httpPost("/getpage.gch?pid=1002&nextpage=net_wlanm_macfilter1_t.gch", body);
+
+    if (!loggedIn_) {
+        return models::OperationResult::failure("Session expired during unblock request. Login again.");
+    }
 
     if (!resp.error.empty()) {
         return models::OperationResult::failure("Unblock request failed: " + resp.error);

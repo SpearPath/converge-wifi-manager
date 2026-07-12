@@ -41,9 +41,13 @@ size_t HeaderCallback(char* buffer, size_t size, size_t nitems, void* userdata) 
 
 CurlHttpClient::CurlHttpClient() {
     curl_global_init(CURL_GLOBAL_ALL);
+    curl_ = curl_easy_init();
 }
 
 CurlHttpClient::~CurlHttpClient() {
+    if (curl_) {
+        curl_easy_cleanup(static_cast<CURL*>(curl_));
+    }
     curl_global_cleanup();
 }
 
@@ -54,11 +58,12 @@ HttpResponse CurlHttpClient::send(const HttpRequest& request) {
 HttpResponse CurlHttpClient::performRequest(const HttpRequest& request) {
     HttpResponse response;
     
-    CURL* curl = curl_easy_init();
+    CURL* curl = static_cast<CURL*>(curl_);
     if (!curl) {
         response.error = "Failed to initialize curl";
         return response;
     }
+    curl_easy_reset(curl);
     
     curl_easy_setopt(curl, CURLOPT_URL, request.url.c_str());
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
@@ -108,7 +113,6 @@ HttpResponse CurlHttpClient::performRequest(const HttpRequest& request) {
     if (chunk) {
         curl_slist_free_all(chunk);
     }
-    curl_easy_cleanup(curl);
     
     return response;
 }

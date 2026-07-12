@@ -10,16 +10,17 @@
 namespace converge::network {
 
 class CurlHttpClient final : public IHttpClient {
-public:
+   public:
     CurlHttpClient();
     ~CurlHttpClient() override;
 
     HttpResponse send(const HttpRequest& request) override;
 
-private:
+   private:
     HttpResponse performRequest(const HttpRequest& request);
+    void* curl_ = nullptr;
 };
 
-} // namespace converge::network
+}  // namespace converge::network
 
-#endif // !_WIN32
+#endif  // !_WIN32

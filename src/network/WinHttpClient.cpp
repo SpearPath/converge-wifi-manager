@@ -6,7 +6,6 @@
 #pragma comment(lib, "winhttp.lib")
 
 #include <sstream>
-#include <stdexcept>
 
 namespace converge::network {
 
@@ -50,23 +49,38 @@ UrlParts parseUrl(const std::string& url) {
 
 }  // namespace
 
+WinHttpClient::WinHttpClient() {
+    session_ = WinHttpOpen(L"ConvergeWiFiManager/1.0",
+                           WINHTTP_ACCESS_TYPE_NO_PROXY,
+                           WINHTTP_NO_PROXY_NAME,
+                           WINHTTP_NO_PROXY_BYPASS, 0);
+}
+
+WinHttpClient::~WinHttpClient() {
+    if (connection_) WinHttpCloseHandle(static_cast<HINTERNET>(connection_));
+    if (session_) WinHttpCloseHandle(static_cast<HINTERNET>(session_));
+}
+
 HttpResponse WinHttpClient::send(const HttpRequest& request) {
     HttpResponse response;
 
-    HINTERNET session = WinHttpOpen(L"ConvergeWiFiManager/1.0",
-                                    WINHTTP_ACCESS_TYPE_NO_PROXY,
-                                    WINHTTP_NO_PROXY_NAME,
-                                    WINHTTP_NO_PROXY_BYPASS, 0);
+    HINTERNET session = static_cast<HINTERNET>(session_);
     if (!session) {
         response.error = "WinHttpOpen failed";
         return response;
     }
 
     auto parts = parseUrl(request.url);
-    HINTERNET connection = WinHttpConnect(session, parts.host.c_str(), parts.port, 0);
+    if (!connection_ || currentHost_ != parts.host || currentPort_ != parts.port) {
+        if (connection_) WinHttpCloseHandle(static_cast<HINTERNET>(connection_));
+        connection_ = WinHttpConnect(session, parts.host.c_str(), parts.port, 0);
+        currentHost_ = parts.host;
+        currentPort_ = parts.port;
+    }
+
+    HINTERNET connection = static_cast<HINTERNET>(connection_);
     if (!connection) {
         response.error = "WinHttpConnect failed";
-        WinHttpCloseHandle(session);
         return response;
     }
 
@@ -76,8 +90,6 @@ HttpResponse WinHttpClient::send(const HttpRequest& request) {
                                              WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
     if (!hRequest) {
         response.error = "WinHttpOpenRequest failed";
-        WinHttpCloseHandle(connection);
-        WinHttpCloseHandle(session);
         return response;
     }
 
@@ -115,8 +127,6 @@ HttpResponse WinHttpClient::send(const HttpRequest& request) {
     if (!sent || !WinHttpReceiveResponse(hRequest, nullptr)) {
         response.error = "HTTP request failed (network error)";
         WinHttpCloseHandle(hRequest);
-        WinHttpCloseHandle(connection);
-        WinHttpCloseHandle(session);
         return response;
     }
 
@@ -161,8 +171,6 @@ HttpResponse WinHttpClient::send(const HttpRequest& request) {
     response.body = body.str();
 
     WinHttpCloseHandle(hRequest);
-    WinHttpCloseHandle(connection);
-    WinHttpCloseHandle(session);
     return response;
 }
 
@@ -199,6 +207,9 @@ void WinHttpClient::parseCookies(const std::string& headers, HttpResponse& respo
 // ponytail: POSIX fallback not yet implemented. Upgrade path: raw sockets or libcurl.
 #include <iostream>
 namespace converge::network {
+
+WinHttpClient::WinHttpClient() {}
+WinHttpClient::~WinHttpClient() {}
 
 HttpResponse WinHttpClient::send(const HttpRequest& request) {
     HttpResponse response;

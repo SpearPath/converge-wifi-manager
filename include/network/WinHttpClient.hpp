@@ -6,13 +6,21 @@
 
 namespace converge::network {
 
-class WinHttpClient final : public IHttpClient {
+class WinHttpClient : public IHttpClient {
 public:
+    WinHttpClient();
+    ~WinHttpClient() override;
+
     HttpResponse send(const HttpRequest& request) override;
 
 private:
-    static std::string buildCookieHeader(const HttpRequest& request);
-    static void parseCookies(const std::string& header, HttpResponse& response);
+    std::string buildCookieHeader(const HttpRequest& request);
+    void parseCookies(const std::string& headers, HttpResponse& response);
+
+    void* session_ = nullptr;
+    void* connection_ = nullptr;
+    std::wstring currentHost_;
+    int currentPort_ = 0;
 };
 
 }  // namespace converge::network

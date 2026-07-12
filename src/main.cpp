@@ -9,7 +9,7 @@
 #include "network/CurlHttpClient.hpp"
 #endif
 
-#include "router/ZteF670LRouterClient.hpp"
+#include "router/RouterFactory.hpp"
 #include "services/DeviceService.hpp"
 #include "utils/ConfigLoader.hpp"
 #include "utils/Logger.hpp"
@@ -24,9 +24,9 @@ int main() {
 #else
     converge::network::CurlHttpClient httpClient;
 #endif
-    converge::router::ZteF670LRouterClient routerClient(config, httpClient);
-    converge::services::DeviceService deviceService(routerClient);
-    converge::core::Application app(routerClient, deviceService, logger);
+    auto routerClient = converge::router::RouterFactory::create(config, httpClient);
+    converge::services::DeviceService deviceService(*routerClient);
+    converge::core::Application app(*routerClient, deviceService, logger);
     converge::cli::CommandDispatcher dispatcher(app);
 
     dispatcher.run();

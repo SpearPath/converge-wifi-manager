@@ -7,6 +7,7 @@ namespace converge::models {
 
 struct AppConfig {
     std::string routerIp = "192.168.1.1";
+    std::string routerType = "ZTE_F670L";
     std::string username = "admin";
     std::chrono::seconds refreshInterval{30};
     bool autoLogin = false;
