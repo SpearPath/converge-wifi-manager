@@ -153,6 +153,17 @@ std::string ZteF670LRouterClient::fetchLoginToken() {
 
 // ---- IRouterClient implementation ----
 
+/**
+ * @brief Authenticates with the ZTE F670L router web interface.
+ * 
+ * This method performs the necessary steps to log into the router, including
+ * fetching CSRF tokens, hashing the password with a random number, and posting
+ * the credentials. If successful, it stores the session cookies.
+ * 
+ * @param username The router admin username (e.g., 'admin').
+ * @param password The router admin password.
+ * @return models::OperationResult Contains success status and an optional error message.
+ */
 models::OperationResult ZteF670LRouterClient::login(const std::string& username,
                                                       const std::string& password) {
     if (username.empty() || password.empty()) {
