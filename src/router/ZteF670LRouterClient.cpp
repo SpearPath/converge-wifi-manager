@@ -4,7 +4,6 @@
 #include <sstream>
 #include <utility>
 #include <random>
-#include <fstream>
 
 namespace converge::router {
 
@@ -14,6 +13,8 @@ namespace converge::router {
 // Upgrade path: make these configurable or add firmware-version detection.
 
 #ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <windows.h>
 #include <wincrypt.h>
 #pragma comment(lib, "advapi32.lib")
