@@ -1,0 +1,34 @@
+#include <filesystem>
+#include <iostream>
+
+#include "cli/CommandDispatcher.hpp"
+#include "core/Application.hpp"
+#ifdef _WIN32
+#include "network/WinHttpClient.hpp"
+#else
+#include "network/CurlHttpClient.hpp"
+#endif
+
+#include "router/ZteF670LRouterClient.hpp"
+#include "services/DeviceService.hpp"
+#include "utils/ConfigLoader.hpp"
+#include "utils/Logger.hpp"
+
+int main() {
+    converge::utils::Logger logger(std::cout);
+    converge::utils::ConfigLoader configLoader;
+    const auto config = configLoader.load(std::filesystem::path{"config/config.json"});
+
+#ifdef _WIN32
+    converge::network::WinHttpClient httpClient;
+#else
+    converge::network::CurlHttpClient httpClient;
+#endif
+    converge::router::ZteF670LRouterClient routerClient(config, httpClient);
+    converge::services::DeviceService deviceService(routerClient);
+    converge::core::Application app(routerClient, deviceService, logger);
+    converge::cli::CommandDispatcher dispatcher(app);
+
+    dispatcher.run();
+    return 0;
+}

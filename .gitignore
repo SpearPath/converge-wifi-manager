@@ -1,0 +1,10 @@
+build/
+config/config.json
+debug_dumps/
+compile_commands.json
+.vscode/
+.cache/
+*.exe
+*.obj
+*.o
+*.lib
