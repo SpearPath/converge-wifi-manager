@@ -101,6 +101,115 @@ std::string extractInputValue(const std::string& html, const std::string& name) 
     return {};
 }
 
+
+using FormFields = std::vector<std::pair<std::string, std::string>>;
+
+std::string extractAttribute(const std::string& tag, const std::string& name) {
+    std::regex pattern("\\b" + name + R"(\s*=\s*(["'])(.*?)\1)", std::regex::icase);
+    std::smatch match;
+    if (std::regex_search(tag, match, pattern)) {
+        return match[2].str();
+    }
+    return {};
+}
+
+FormFields extractFormFields(const std::string& html) {
+    FormFields fields;
+    std::regex inputPattern(R"(<input\b[^>]*>)", std::regex::icase);
+    for (auto it = std::sregex_iterator(html.begin(), html.end(), inputPattern);
+         it != std::sregex_iterator(); ++it) {
+        const auto tag = it->str();
+        auto name = extractAttribute(tag, "name");
+        if (!name.empty()) {
+            fields.emplace_back(std::move(name), extractAttribute(tag, "value"));
+        }
+    }
+
+    // ZTE pages often create hidden inputs from JavaScript instead of literal <input> tags.
+    std::regex jsHiddenPattern(R"(createHiddenInput\s*\(\s*(["'])(.*?)\1\s*,\s*(["'])(.*?)\3\s*\))",
+                               std::regex::icase);
+    for (auto it = std::sregex_iterator(html.begin(), html.end(), jsHiddenPattern);
+         it != std::sregex_iterator(); ++it) {
+        fields.emplace_back((*it)[2].str(), (*it)[4].str());
+    }
+
+    std::regex scriptPattern(R"(<script\b[^>]*>([\s\S]*?)</script\s*>)", std::regex::icase);
+    std::regex sessionTokenPattern(R"(\bvar\s+session_token\s*=\s*(["'])([^"']*)\1\s*;)");
+    std::regex tokenNamePattern(
+        R"(\b([A-Za-z_$][A-Za-z0-9_$]*)\s*\.\s*setAttribute\s*\(\s*(["'])name\2\s*,\s*(["'])_SESSION_TOKEN\3\s*\))");
+    for (auto it = std::sregex_iterator(html.begin(), html.end(), scriptPattern);
+         it != std::sregex_iterator(); ++it) {
+        const auto script = (*it)[1].str();
+        std::smatch sessionTokenMatch;
+        std::smatch tokenNameMatch;
+        if (!std::regex_search(script, sessionTokenMatch, sessionTokenPattern) ||
+            !std::regex_search(script, tokenNameMatch, tokenNamePattern)) {
+            continue;
+        }
+
+        std::regex tokenValuePattern(
+            "\\b" + tokenNameMatch[1].str() +
+            R"(\s*\.\s*setAttribute\s*\(\s*(["'])value\1\s*,\s*session_token\s*\))");
+        if (std::regex_search(script, tokenValuePattern)) {
+            fields.emplace_back("_SESSION_TOKEN", sessionTokenMatch[2].str());
+            break;
+        }
+    }
+    return fields;
+}
+
+void setField(FormFields& fields, const std::string& name, const std::string& value) {
+    for (auto& field : fields) {
+        if (field.first == name) {
+            field.second = value;
+            return;
+        }
+    }
+    fields.emplace_back(name, value);
+}
+
+std::string getField(const FormFields& fields, const std::string& name) {
+    for (const auto& field : fields) {
+        if (field.first == name) return field.second;
+    }
+    return {};
+}
+
+std::string buildFormBody(const FormFields& fields) {
+    std::string body;
+    for (const auto& [name, value] : fields) {
+        if (!body.empty()) body += '&';
+        body += urlEncode(name) + "=" + urlEncode(value);
+    }
+    return body;
+}
+
+bool asciiEqualIgnoreCase(const std::string& lhs, const std::string& rhs) {
+    if (lhs.size() != rhs.size()) return false;
+    for (size_t i = 0; i < lhs.size(); ++i) {
+        if (std::tolower(static_cast<unsigned char>(lhs[i])) !=
+            std::tolower(static_cast<unsigned char>(rhs[i]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string findAclIndexByMac(const FormFields& fields, const std::string& macAddress) {
+    const std::string prefix = "MACAddress";
+    for (const auto& [name, value] : fields) {
+        if (name.rfind(prefix, 0) != 0 || name.size() == prefix.size()) continue;
+        bool allDigits = true;
+        for (size_t i = prefix.size(); i < name.size(); ++i) {
+            allDigits = allDigits && std::isdigit(static_cast<unsigned char>(name[i]));
+        }
+        if (allDigits && asciiEqualIgnoreCase(value, macAddress)) {
+            return name.substr(prefix.size());
+        }
+    }
+    return {};
+}
+
 // Extract text between two markers in HTML
 std::string extractBetween(const std::string& html,
                             const std::string& before,
@@ -412,25 +521,44 @@ models::OperationResult ZteF670LRouterClient::blockDevice(const std::string& mac
         return models::OperationResult::failure("Not logged in. Login first.");
     }
 
-    // ponytail: MAC filter endpoint varies significantly across firmware.
-    // Common approach: POST to WLAN access control page.
-    // /getpage.gch?pid=1002&nextpage=net_wlanm_macfilter1_t.gch
-    // Fields: WMACFilter=Enable, WFilterMode=Block, WMACAddr=XX:XX:XX:XX:XX:XX
-    std::string body = "WMACFilter=Enable"
-                       "&WFilterMode=Block"
-                       "&WMACAddr=" + urlEncode(macAddress);
-    auto resp = httpPost("/getpage.gch?pid=1002&nextpage=net_wlanm_macfilter1_t.gch", body);
+    const std::string aclPath = "/getpage.gch?pid=1002&nextpage=net_wlanm_macfilter1_t.gch";
+    auto getResp = httpGet(aclPath);
+    if (!loggedIn_) {
+        return models::OperationResult::failure("Session expired while fetching MAC filter page. Login again.");
+    }
+    if (!getResp.error.empty()) {
+        return models::OperationResult::failure("Failed to GET MAC filter page: " + getResp.error);
+    }
+    if (getResp.statusCode != 200) {
+        return models::OperationResult::failure("Failed to GET MAC filter page (HTTP " + std::to_string(getResp.statusCode) + ").");
+    }
+
+    auto fields = extractFormFields(getResp.body);
+    if (getField(fields, "_SESSION_TOKEN").empty()) {
+        return models::OperationResult::failure("MAC filter page did not include _SESSION_TOKEN.");
+    }
+
+    setField(fields, "IF_ACTION", "new");
+    setField(fields, "IF_ERRORSTR", "SUCC");
+    setField(fields, "IF_ERRORPARAM", "SUCC");
+    setField(fields, "IF_ERRORTYPE", "-1");
+    setField(fields, "IF_INDEX", "-1");
+    setField(fields, "IF_INSTNUM", "0");
+    setField(fields, "ViewName", "NULL");
+    setField(fields, "Interface", "0");
+    setField(fields, "MACAddress", macAddress);
+    setField(fields, "ACLPolicy", "Ban");
+
+    auto resp = httpPost(aclPath, buildFormBody(fields));
 
     if (!loggedIn_) {
         return models::OperationResult::failure("Session expired during block request. Login again.");
     }
-
     if (!resp.error.empty()) {
         return models::OperationResult::failure("Block request failed: " + resp.error);
     }
     if (resp.statusCode >= 200 && resp.statusCode < 400) {
-        return models::OperationResult::success("Block request sent for " + macAddress
-            + ". Verify on router admin page.");
+        return models::OperationResult::success("Block request sent for " + macAddress + ". Verify on router admin page.");
     }
     return models::OperationResult::failure(
         "Block may have failed (HTTP " + std::to_string(resp.statusCode) + "). Check router admin page.");
@@ -444,26 +572,61 @@ models::OperationResult ZteF670LRouterClient::unblockDevice(const std::string& m
         return models::OperationResult::failure("Not logged in. Login first.");
     }
 
-    // ponytail: unblock = remove MAC from filter list or set mode to Allow.
-    // Exact mechanism is firmware-dependent.
-    std::string body = "WMACFilter=Enable"
-                       "&WFilterMode=Allow"
-                       "&WMACAddr=" + urlEncode(macAddress);
-    auto resp = httpPost("/getpage.gch?pid=1002&nextpage=net_wlanm_macfilter1_t.gch", body);
+    const std::string aclPath = "/getpage.gch?pid=1002&nextpage=net_wlanm_macfilter1_t.gch";
+    auto getResp = httpGet(aclPath);
+    if (!loggedIn_) {
+        return models::OperationResult::failure("Session expired while fetching MAC filter page. Login again.");
+    }
+    if (!getResp.error.empty()) {
+        return models::OperationResult::failure("Failed to GET MAC filter page: " + getResp.error);
+    }
+    if (getResp.statusCode != 200) {
+        return models::OperationResult::failure("Failed to GET MAC filter page (HTTP " + std::to_string(getResp.statusCode) + ").");
+    }
+
+    auto fields = extractFormFields(getResp.body);
+    if (getField(fields, "_SESSION_TOKEN").empty()) {
+        return models::OperationResult::failure("MAC filter page did not include _SESSION_TOKEN.");
+    }
+
+    auto index = findAclIndexByMac(fields, macAddress);
+    if (index.empty()) {
+        return models::OperationResult::failure("MAC address not found in filter list. Cannot unblock.");
+    }
+
+    // Store values to reuse after clearing
+    std::string sessionToken = getField(fields, "_SESSION_TOKEN");
+    std::string viewId = getField(fields, "IF_VIEWID");
+
+    // Clear all fields and set only indexed fields for delete
+    fields.clear();
+
+    setField(fields, "IF_ACTION", "delete");
+    setField(fields, "IF_ERRORSTR", "SUCC");
+    setField(fields, "IF_ERRORPARAM", "SUCC");
+    setField(fields, "IF_ERRORTYPE", "-1");
+    setField(fields, "IF_VIEWID", viewId);
+    setField(fields, "_SESSION_TOKEN", sessionToken);
+    setField(fields, "IF_INDEX", index);
+    setField(fields, "IF_INSTNUM", "1");
+    setField(fields, "ViewName" + index, "IGD.ACL1");
+    setField(fields, "Interface" + index, "0");
+    setField(fields, "MACAddress" + index, macAddress);
+
+    auto resp = httpPost(aclPath, buildFormBody(fields));
 
     if (!loggedIn_) {
         return models::OperationResult::failure("Session expired during unblock request. Login again.");
     }
-
     if (!resp.error.empty()) {
         return models::OperationResult::failure("Unblock request failed: " + resp.error);
     }
     if (resp.statusCode >= 200 && resp.statusCode < 400) {
-        return models::OperationResult::success("Unblock request sent for " + macAddress
-            + ". Verify on router admin page.");
+        return models::OperationResult::success("Unblock request sent for " + macAddress + " (Index: " + index + ").");
     }
     return models::OperationResult::failure(
-        "Unblock may have failed (HTTP " + std::to_string(resp.statusCode) + "). Check router admin page.");
+        "Unblock may have failed (HTTP " + std::to_string(resp.statusCode) + ").");
 }
+
 
 }  // namespace converge::router

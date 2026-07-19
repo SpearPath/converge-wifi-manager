@@ -336,16 +336,73 @@ TEST(HtmlParsingTests, BlockDeviceSucceeds) {
     ZteF670LRouterClient client(testConfig(), mock);
 
     std::string loginPage = R"(<html><body></body></html>)";
+    std::string aclPage = R"(<html><body>
+        <input type="hidden" name="_SESSION_TOKEN" value="tok123">
+        <input type="hidden" name="IF_VIEWID" value="IGD.LD1.WLAN1">
+        <input type="hidden" name="ACLPolicy" value="Ban">
+    </body></html>)";
 
     EXPECT_CALL(mock, send(_))
         .WillOnce(Return(makeResponse(200, loginPage)))
         .WillOnce(Return(loginRedirect()))
         .WillOnce(Return(makeResponse(200, "")))
+        .WillOnce(Return(makeResponse(200, aclPage)))
         .WillOnce(Return(makeResponse(200, "OK")));
 
     client.login("admin", "pass");
     auto result = client.blockDevice("AA:BB:CC:DD:EE:FF");
     EXPECT_TRUE(result.ok);
+}
+
+TEST(HtmlParsingTests, BlockDeviceUsesSessionTokenFromJavaScript) {
+    MockHttpClient mock;
+    ZteF670LRouterClient client(testConfig(), mock);
+
+    std::string loginPage = R"(<html><body></body></html>)";
+    std::string aclPage = R"(<html><body>
+        <form method="post"></form>
+        <script>
+            var session_token = "sanitized-token";
+            tokenInput.setAttribute("name", "_SESSION_TOKEN");
+            tokenInput.setAttribute("value", session_token);
+        </script>
+    </body></html>)";
+
+    EXPECT_CALL(mock, send(_))
+        .WillOnce(Return(makeResponse(200, loginPage)))
+        .WillOnce(Return(loginRedirect()))
+        .WillOnce(Return(makeResponse(200, "")))
+        .WillOnce(Return(makeResponse(200, aclPage)))
+        .WillOnce([](const HttpRequest& request) {
+            EXPECT_NE(request.body.find("_SESSION_TOKEN=sanitized-token"), std::string::npos);
+            return makeResponse(200, "OK");
+        });
+
+    client.login("admin", "pass");
+    auto result = client.blockDevice("AA:BB:CC:DD:EE:FF");
+    EXPECT_TRUE(result.ok);
+}
+
+TEST(HtmlParsingTests, BlockDeviceReportsExpiredSessionOnMacFilterPage) {
+    MockHttpClient mock;
+    ZteF670LRouterClient client(testConfig(), mock);
+
+    std::string loginPage = R"(<html><body></body></html>)";
+    std::string expiredPage = R"(<html><body>
+        <input name="Frm_Logintoken" value="sanitized-login-token">
+    </body></html>)";
+
+    EXPECT_CALL(mock, send(_))
+        .WillOnce(Return(makeResponse(200, loginPage)))
+        .WillOnce(Return(loginRedirect()))
+        .WillOnce(Return(makeResponse(200, "")))
+        .WillOnce(Return(makeResponse(200, expiredPage)));
+
+    client.login("admin", "pass");
+    auto result = client.blockDevice("AA:BB:CC:DD:EE:FF");
+    EXPECT_FALSE(result.ok);
+    EXPECT_NE(result.message.find("Session expired"), std::string::npos);
+    EXPECT_EQ(result.message.find("did not include _SESSION_TOKEN"), std::string::npos);
 }
 
 TEST(HtmlParsingTests, BlockDeviceFailsWhenNotLoggedIn) {
@@ -364,16 +421,76 @@ TEST(HtmlParsingTests, UnblockDeviceSucceeds) {
     ZteF670LRouterClient client(testConfig(), mock);
 
     std::string loginPage = R"(<html><body></body></html>)";
+    std::string aclPage = R"(<html><body>
+        <input type="hidden" name="_SESSION_TOKEN" value="tok123">
+        <input type="hidden" name="IF_VIEWID" value="IGD.LD1.WLAN1">
+        <input type="hidden" name="MACAddress0" value="AA:BB:CC:DD:EE:FF">
+        <input type="hidden" name="ViewName0" value="IGD.ACL1">
+        <input type="hidden" name="Interface0" value="0">
+    </body></html>)";
 
     EXPECT_CALL(mock, send(_))
         .WillOnce(Return(makeResponse(200, loginPage)))
         .WillOnce(Return(loginRedirect()))
         .WillOnce(Return(makeResponse(200, "")))
+        .WillOnce(Return(makeResponse(200, aclPage)))
         .WillOnce(Return(makeResponse(200, "OK")));
 
     client.login("admin", "pass");
     auto result = client.unblockDevice("AA:BB:CC:DD:EE:FF");
     EXPECT_TRUE(result.ok);
+}
+
+TEST(HtmlParsingTests, UnblockDeviceUsesSessionTokenFromJavaScript) {
+    MockHttpClient mock;
+    ZteF670LRouterClient client(testConfig(), mock);
+
+    std::string loginPage = R"(<html><body></body></html>)";
+    std::string aclPage = R"(<html><body>
+        <script>
+            var session_token = 'sanitized-token';
+            tokenInput.setAttribute('name', '_SESSION_TOKEN');
+            tokenInput.setAttribute('value', session_token);
+        </script>
+        <input type="hidden" name="IF_VIEWID" value="IGD.LD1.WLAN1">
+        <input type="hidden" name="MACAddress0" value="AA:BB:CC:DD:EE:FF">
+    </body></html>)";
+
+    EXPECT_CALL(mock, send(_))
+        .WillOnce(Return(makeResponse(200, loginPage)))
+        .WillOnce(Return(loginRedirect()))
+        .WillOnce(Return(makeResponse(200, "")))
+        .WillOnce(Return(makeResponse(200, aclPage)))
+        .WillOnce([](const HttpRequest& request) {
+            EXPECT_NE(request.body.find("_SESSION_TOKEN=sanitized-token"), std::string::npos);
+            return makeResponse(200, "OK");
+        });
+
+    client.login("admin", "pass");
+    auto result = client.unblockDevice("AA:BB:CC:DD:EE:FF");
+    EXPECT_TRUE(result.ok);
+}
+
+TEST(HtmlParsingTests, UnblockDeviceReportsExpiredSessionOnMacFilterPage) {
+    MockHttpClient mock;
+    ZteF670LRouterClient client(testConfig(), mock);
+
+    std::string loginPage = R"(<html><body></body></html>)";
+    std::string expiredPage = R"(<html><body>
+        <input name="Frm_Logintoken" value="sanitized-login-token">
+    </body></html>)";
+
+    EXPECT_CALL(mock, send(_))
+        .WillOnce(Return(makeResponse(200, loginPage)))
+        .WillOnce(Return(loginRedirect()))
+        .WillOnce(Return(makeResponse(200, "")))
+        .WillOnce(Return(makeResponse(200, expiredPage)));
+
+    client.login("admin", "pass");
+    auto result = client.unblockDevice("AA:BB:CC:DD:EE:FF");
+    EXPECT_FALSE(result.ok);
+    EXPECT_NE(result.message.find("Session expired"), std::string::npos);
+    EXPECT_EQ(result.message.find("did not include _SESSION_TOKEN"), std::string::npos);
 }
 
 TEST(HtmlParsingTests, BlockDeviceRejectsEmptyMac) {
@@ -391,11 +508,16 @@ TEST(HtmlParsingTests, SessionExpirationDuringBlock) {
     ZteF670LRouterClient client(testConfig(), mock);
 
     std::string loginPage = R"(<html><body></body></html>)";
+    std::string aclPage = R"(<html><body>
+        <input type="hidden" name="_SESSION_TOKEN" value="tok123">
+        <input type="hidden" name="IF_VIEWID" value="IGD.LD1.WLAN1">
+    </body></html>)";
 
     EXPECT_CALL(mock, send(_))
         .WillOnce(Return(makeResponse(200, loginPage)))
         .WillOnce(Return(loginRedirect()))
         .WillOnce(Return(makeResponse(200, "")))
+        .WillOnce(Return(makeResponse(200, aclPage)))
         // block request gets 401
         .WillOnce(Return(makeResponse(401, "")));
 
